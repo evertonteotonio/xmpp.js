@@ -73,7 +73,7 @@ async function authenticate(SASL, entity, mechname, credentials) {
   })
 }
 
-module.exports = function sasl({streamFeatures}, credentials) {
+module.exports = function sasl({streamFeatures}, onAuthenticate) {
   const SASL = new SASLFactory()
 
   streamFeatures.use('mechanisms', NS, async ({stanza, entity}) => {
@@ -82,20 +82,16 @@ module.exports = function sasl({streamFeatures}, credentials) {
     const intersection = supported.filter(mech => {
       return offered.includes(mech)
     })
-    let mech = intersection[0]
 
-    if (typeof credentials === 'function') {
-      await credentials(
-        creds => authenticate(SASL, entity, mech, creds, stanza),
-        mech
-      )
-    } else {
-      if (!credentials.username && !credentials.password) {
-        mech = 'ANONYMOUS'
-      }
-
-      await authenticate(SASL, entity, mech, credentials, stanza)
+    const mechanisms = {
+      offered,
+      supported,
+      intersection,
     }
+
+    await onAuthenticate(({mechanisms, ...credentials}) => {
+      return authenticate(SASL, entity, mechanism, credentials, stanza)
+    }, mechanisms)
 
     await entity.restart()
   })

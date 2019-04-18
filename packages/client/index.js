@@ -25,7 +25,14 @@ const plain = require('@xmpp/sasl-plain')
 const anonymous = require('@xmpp/sasl-anonymous')
 
 function client(options = {}) {
-  const {resource, credentials, username, password, ...params} = options
+  const {
+    resource,
+    credentials,
+    username,
+    password,
+    mechanism,
+    ...params
+  } = options
 
   const {domain, service} = params
   if (!domain && service) {
@@ -33,6 +40,21 @@ function client(options = {}) {
   }
 
   const entity = new Client(params)
+
+  function onAuthenticate(authenticate, mechanisms) {
+    const creds = credentials || {username, password}
+
+    let mechanism = mechanisms.intersection[0]
+
+    if (!creds.username && !creds.password) {
+      mechanism = 'ANONYMOUS'
+    }
+
+    return authenticate({
+      mechanism,
+      ...creds,
+    })
+  }
 
   const reconnect = _reconnect({entity})
   const websocket = _websocket({entity})
@@ -46,7 +68,10 @@ function client(options = {}) {
   const resolve = _resolve({entity})
   // Stream features - order matters and define priority
   const starttls = _starttls({streamFeatures})
-  const sasl = _sasl({streamFeatures}, credentials || {username, password})
+  const sasl = _sasl(
+    {streamFeatures},
+    typeof credentials === 'function' ? credentials : onAuthenticate
+  )
   const resourceBinding = _resourceBinding({iqCaller, streamFeatures}, resource)
   const sessionEstablishment = _sessionEstablishment({iqCaller, streamFeatures})
   // SASL mechanisms - order matters and define priority
